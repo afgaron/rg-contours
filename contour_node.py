@@ -1,7 +1,7 @@
 '''
 This file contains an implementation of a contour tree object. Each Node contains a contour and links to the immediately interior contours.
 The total radio flux through a contour, as well as radio peaks, can be calculated from the FITS file plus the contour pixels.
-The beam size of the survey is hard-coded in lines 60-66 and is currently set to FIRST; this only matters for flux measurements.
+The beam size of the survey is hard-coded in lines 60-66 and is currently set to FIRST; this only matters for integrated flux measurements.
 '''
 
 import numpy as np
@@ -10,42 +10,42 @@ from astropy import wcs
 from scipy.special import erfinv
 from matplotlib import path
 
-#custom modules
-import misc_functions as fn #contains miscellaneous helper functions
+# Custom modules
+import misc_functions as fn # Contains miscellaneous helper functions
 
 class Node(object):
     '''tree implementation for contours'''
     
     def __init__(self, value=None, contour=None, fits_loc=None, img=None, w=None, sigmaJyBeam=0):
         '''tree initializer'''
-        self.value = value #contour curve and level data
-        self.children = [] #next contour curves contained within this one
+        self.value = value # Contour curve and level data
+        self.children = [] # Next contour curves contained within this one
         if fits_loc is not None:
             self.getFITS(fits_loc)
         else:
-            self.img = img #FITS data as an array
-            self.imgSize = int(img.shape[0]) #size in pixels of FITS data
-            self.w = w #WCS converter object
-        dec = self.w.wcs_pix2world( np.array( [[self.imgSize/2., self.imgSize/2.]] ), 1)[0][1] #dec of image center
-        if dec > 4.5558: #northern region, above +4*33'21"
-            self.beamAreaArcsec2 = 1.44*np.pi*5.4*5.4/4 #5.4" FWHM circle
-        elif 4.5558 > dec > -2.5069: #middle region, between +4*33'21" and -2*30'25"
-            self.beamAreaArcsec2 = 1.44*np.pi*6.4*5.4/4 #6.4"x5.4" FWHM ellipse
-        else: #southern region, below -2*30'25"
-            self.beamAreaArcsec2 = 1.44*np.pi*6.8*5.4/4 #6.8"x5.4" FWHM ellipse
-        self.pixelAreaArcsec2 = wcs.utils.proj_plane_pixel_area(self.w)*3600*3600 #arcsecond^2
+            self.img = img # FITS data as an array
+            self.imgSize = int(img.shape[0]) # Size in pixels of FITS data
+            self.w = w # WCS converter object
+        dec = self.w.wcs_pix2world( np.array( [[self.imgSize/2., self.imgSize/2.]] ), 1)[0][1] # Dec of image center
+        if dec > 4.5558: # Northern region, above +4*33'21"
+            self.beamAreaArcsec2 = 1.44*np.pi*5.4*5.4/4 # 5.4" FWHM circle
+        elif 4.5558 > dec > -2.5069: # Middle region, between +4*33'21" and -2*30'25"
+            self.beamAreaArcsec2 = 1.44*np.pi*6.4*5.4/4 # 6.4"x5.4" FWHM ellipse
+        else: # Southern region, below -2*30'25"
+            self.beamAreaArcsec2 = 1.44*np.pi*6.8*5.4/4 # 6.8"x5.4" FWHM ellipse
+        self.pixelAreaArcsec2 = wcs.utils.proj_plane_pixel_area(self.w)*3600*3600 # Arcsecond^2
         if contour is not None:
-            mad2sigma = np.sqrt(2)*erfinv(2*0.75-1) #conversion factor
-            self.sigmaJyBeam = (contour[0]['level']/3) / mad2sigma #standard deviation of flux density measurements
+            mad2sigma = np.sqrt(2)*erfinv(2*0.75-1) # Conversion factor
+            self.sigmaJyBeam = (contour[0]['level']/3) / mad2sigma # Standard deviation of flux density measurements
             self.sigmamJy = self.sigmaJyBeam*1000*self.pixelAreaArcsec2/self.beamAreaArcsec2
             for i in contour:
                 self.insert(Node(value=i, img=self.img, w=self.w, sigmaJyBeam=self.sigmaJyBeam))
             vertices = []
             for pos in contour[0]['arr']:
                 vertices.append([pos['x'], pos['y']])
-            self.pathOutline = path.Path(vertices) #self.pathOutline is a Path object tracing the contour
-            self.getTotalFlux() #self.fluxmJy and self.fluxErrmJy are the total integrated flux and error, respectively; also sets self.areaArcsec2, in arcsec^2
-            self.getPeaks() #self.peaks is list of dicts of peak fluxes and locations
+            self.pathOutline = path.Path(vertices) # self.pathOutline is a Path object tracing the contour
+            self.getTotalFlux() # self.fluxmJy and self.fluxErrmJy are the total integrated flux and error, respectively; also sets self.areaArcsec2, in arcsec^2
+            self.getPeaks() # self.peaks is list of dicts of peak fluxes and locations
         else:
             self.sigmaJyBeam = sigmaJyBeam
             self.pathOutline = None
@@ -55,16 +55,16 @@ class Node(object):
     
     def insert(self, newNode):
         '''insert a contour node'''
-        if self.value is None: #initialize the root with the outermost contour
+        if self.value is None: # Initialize the root with the outermost contour
             self.value = newNode.value
-        elif self.value == newNode.value: #no duplicate contours
+        elif self.value == newNode.value: # No duplicate contours
             return
         else:
-            if newNode.value['k'] == self.value['k'] + 1: #add a contour one level higher as a child
+            if newNode.value['k'] == self.value['k'] + 1: # Add a contour one level higher as a child
                 self.children.append(newNode)
-            elif newNode.value['k'] <= self.value['k']: #if a contour of lower level appears, something went wrong
+            elif newNode.value['k'] <= self.value['k']: # If a contour of lower level appears, something went wrong
                 raise RuntimeError('Inside-out contour')
-            else: #otherwise, find the next level that has a bounding box enclosing the new contour
+            else: # Otherwise, find the next level that has a bounding box enclosing the new contour
                 inner = fn.findBox(newNode.value['arr'])
                 for child in self.children:
                     outer = fn.findBox(child.value['arr'])
@@ -85,10 +85,10 @@ class Node(object):
     
     def getFITS(self, fits_loc):
         '''read FITS data from file'''
-        self.img = fits.getdata(fits_loc, 0) #imports data as array
-        self.img[np.isnan(self.img)] = 0 #sets NANs to 0
+        self.img = fits.getdata(fits_loc, 0) # Imports data as array
+        self.img[np.isnan(self.img)] = 0 # Sets NANs to 0
         self.imgSize = int(self.img.shape[0])
-        self.w = wcs.WCS(fits.getheader(fits_loc, 0)) #gets pixel-to-WCS conversion from header
+        self.w = wcs.WCS(fits.getheader(fits_loc, 0)) # Gets pixel-to-WCS conversion from header
         return self.img
     
     def getTotalFlux(self):
@@ -111,10 +111,10 @@ class Node(object):
         if pList is None:
             pList = []
         if self.children == []:
-            bbox = fn.bboxToDS9(fn.findBox(self.value['arr']), self.imgSize)[0] #bbox of innermost contour
-            fluxDensityJyBeam = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() #peak flux in bbox, with 1 pixel padding
-            locP = np.where(self.img == fluxDensityJyBeam) #location in pixels
-            locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) #location in ra and dec
+            bbox = fn.bboxToDS9(fn.findBox(self.value['arr']), self.imgSize)[0] # Bounding box of innermost contour
+            fluxDensityJyBeam = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() # Peak flux in bbox, with 1 pixel padding
+            locP = np.where(self.img == fluxDensityJyBeam) # Location in pixels
+            locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) # Location in ra and dec
             peak = dict(ra=locRD[0][0], dec=locRD[0][1], flux=fluxDensityJyBeam*1000)
             pList.append(peak)
         else:
