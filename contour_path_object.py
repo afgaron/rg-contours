@@ -1,5 +1,5 @@
 '''
-This file contains an implementation of a contour tree object. Each Node contains a contour (stored as a matplotlib Path) and links to the immediately interior contours.
+This file contains an implementation of a contour tree object, designed for processing morphology of double and triple radio galaxies. Each Node contains a contour (stored as a matplotlib Path) and links to the immediately interior contours.
 '''
 
 import numpy as np
@@ -46,7 +46,7 @@ class Node(object):
 						child.insert(new_node)
 	
 	def check(self):
-		'''Manually check the topology of the tree by printing level numbers and bboxes to screen (for testing only)'''
+		'''Manually check the topology of the tree by printing level numbers and bounding boxes to screen (for testing only)'''
 		if self.value is None:
 			print 'Empty'
 		else:

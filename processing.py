@@ -9,7 +9,9 @@ import contour_node as c # Node class for processing radio fluxes
 import contour_path_object as cpo # Node class for processing bending information
 
 def get_radio(source):
-	'''calculates all of the radio parameters from the fits file'''
+	'''
+	Calculates all of the radio parameters from the fits file
+	'''
 	
 	# Read radio contour from file
 	with open(source['contour_file'], 'r') as cf:
@@ -112,17 +114,16 @@ def get_bending(source):
 	w = wcs.WCS(fits.getheader(source['fits_file'], 0))
 	
 	# Get the location of the source
-	ir = coord.SkyCoord(source['host_data']['ra'], source['host_data']['dec'], unit=(u.deg,u.deg), frame='icrs')
-	
-	ir_pos = w.wcs_world2pix(np.array([[ir.ra.deg,ir.dec.deg]]), 1)
+	host = coord.SkyCoord(source['host_data']['ra'], source['host_data']['dec'], unit=(u.deg,u.deg), frame='icrs')
+	host_pos = w.wcs_world2pix(np.array([[host.ra.deg, host.dec.deg]]), 1)
 	peaks = source['radio']['peaks']
-	peak_pos = w.wcs_world2pix(np.array([ [peak['ra'],peak['dec']] for peak in peaks ]), 1)
+	peak_pos = w.wcs_world2pix(np.array([[peak['ra'], peak['dec']] for peak in peaks]), 1)
 	
 	# Get image parameters for this source
 	with open(source['contour_file'], 'r') as cf:
 		data = json.load(cf)
 	
-	contour_tree = get_contours(w, ir_pos, peak_pos, data, peak_count)
+	contour_tree = get_contours(w, host_pos, peak_pos, data, peak_count)
 	peaks = get_global_peaks(w, peak_pos, peaks, contour_tree)
 	if len(peaks) != 2:
 		output("%s didn't have 2 tails" % source['zooniverse_id'])
@@ -131,9 +132,9 @@ def get_bending(source):
 	contour_list = [child.path for child in contour_tree.children if any(child.contains(peak_pos))]
 	
 	# Using the 'contour' method
-	bending_angles = get_angles(w, ir, 'contour', contour_list)
-	tail_lengths = get_tail_lengths(w, ir, 'contour', contour_list)
-	ratios = peak_edge_ratio(w, ir, peaks, tail_lengths_apparent)
+	bending_angles = get_angles(w, host, 'contour', contour_list)
+	tail_lengths = get_tail_lengths(w, host, 'contour', contour_list)
+	ratios = peak_edge_ratio(w, host, peaks, tail_lengths_apparent)
 	asymmetry = ratios[1]/ratios[0]
 	using_contour = {'tail_deg_0':tail_lengths[0], 'tail_deg_1':tail_lengths[1], 'size_deg':sum(tail_lengths), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 	using_contour.update(bending_angles)
@@ -142,9 +143,9 @@ def get_bending(source):
 			using_contour[key] = using_contour[key].deg
 	
 	# Using the 'peak' method
-	bending_angles = get_angles(w, ir, 'peak', peaks)
-	tail_lengths = get_tail_lengths(w, ir, 'peak', contour_list, peaks)
-	ratios = peak_edge_ratio(w, ir, peaks, tail_lengths)
+	bending_angles = get_angles(w, host, 'peak', peaks)
+	tail_lengths = get_tail_lengths(w, host, 'peak', contour_list, peaks)
+	ratios = peak_edge_ratio(w, host, peaks, tail_lengths)
 	asymmetry = ratios[1]/ratios[0]
 	using_peaks = {'tail_deg_0':tail_lengths[0], 'tail_deg_1':tail_lengths[1], 'size_deg':sum(tail_lengths), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 	using_peaks.update(bending_angles)
@@ -157,10 +158,10 @@ def get_bending(source):
 	
 	return entry
 
-def get_contours(w, ir_pos, peak_pos, data, peak_count):
+def get_contours(w, host_pos, peak_pos, data, peak_count):
 	'''
-	Returns a list of Path objects corresponding to each outer contour in the data, in RA and dec coordinates
-	Removes outer layers until there are two components and a disjoint IR
+	Returns a list of Path objects corresponding to each outer contour in the data, in RA and Dec coordinates
+	Removes outer layers until there are two components and a disjoint host location
 	Removes any contours that aren't in this source
 	'''
 	assert (peak_count in [2,3]), 'Not a valid morphology'
@@ -185,13 +186,13 @@ def get_contours(w, ir_pos, peak_pos, data, peak_count):
 	source_tree.insert(cpo.Node(w, value=value_at_inf))
 	source_tree.children = contour_trees
 	
-	# Remove the BCG source if it's a triple
+	# Remove the BCG radio peak if it's a triple
 	if peak_count == 3:
-		source_tree.remove_triple_center(ir_pos, peak_pos)
+		source_tree.remove_triple_center(host_pos, peak_pos)
 	
-	# Increase the contour level until the IR position is outside all the contours
+	# Increase the contour level until the host position is outside all the contours
 	roots = []
-	source_tree.get_equal_disjoint(ir_pos, roots)
+	source_tree.get_equal_disjoint(host_pos, roots)
 	source_tree.children = roots
 	
 	return source_tree
@@ -210,16 +211,16 @@ def get_global_peaks(w, peak_pos, peaks, contour_tree):
 			global_peaks.append(global_peak)
 	return global_peaks
 
-def get_angles(w, ir, method, method_data):
+def get_angles(w, host, method, method_data):
 	'''
 	Determines the opening angle of the radio tail and the position angle of the angle bisector
 	Method:
-		Contour: from the IR position to the most distant part of the radio contour (data is contour_list)
-		Peak: from the IR position to the peak of each component (data is source['radio']['peaks'])
+		Contour: from the host position to the most distant part of the radio contour (data is contour_list)
+		Peak: from the host position to the peak of each component (data is source['radio']['peaks'])
 	'''
 	assert (method in ['contour', 'peak']), 'Not a valid method'
-	pos_angle_0 = get_pos_angle(w, ir, method, method_data[0])
-	pos_angle_1 = get_pos_angle(w, ir, method, method_data[1])
+	pos_angle_0 = get_pos_angle(w, host, method, method_data[0])
+	pos_angle_1 = get_pos_angle(w, host, method, method_data[1])
 	opening_angle = np.abs(pos_angle_1-pos_angle_0).wrap_at(2*np.pi*u.rad)
 	bending_angle = coord.Angle(np.abs(np.pi*u.rad - opening_angle))
 	bisector = (pos_angle_1+pos_angle_0)/2.
@@ -228,52 +229,52 @@ def get_angles(w, ir, method, method_data):
 	bending_angles = {'pos_angle_0':pos_angle_0, 'pos_angle_1':pos_angle_1, 'bending_angle':bending_angle, 'bisector':bisector.wrap_at(2*np.pi*u.rad)}
 	return bending_angles
 
-def get_pos_angle(w, ir, method, method_data):
+def get_pos_angle(w, host, method, method_data):
 	'''
-	Determines the position angle between the IR position and the given comparison object
+	Determines the position angle between the host position and the given comparison object
 	Method:
-		Contour: from the IR position to the most distant part of the radio contour (data is contour_list)
-		Peak: from the IR position to the peak of each component (data is source['radio']['peaks'])
+		Contour: from the host position to the most distant part of the radio contour (data is contour_list)
+		Peak: from the host position to the peak of each component (data is source['radio']['peaks'])
 	'''
 	if method == 'contour':
 		contour_sky = coord.SkyCoord(w.wcs_pix2world(method_data.vertices,1), unit=(u.deg,u.deg), frame='icrs')
-		separation = ir.separation(contour_sky)
-		pos_angle = ir.position_angle(contour_sky)[separation==np.max(separation)][0]
+		separation = host.separation(contour_sky)
+		pos_angle = host.position_angle(contour_sky)[separation==np.max(separation)][0]
 	elif method == 'peak':
-		pos_angle = ir.position_angle(coord.SkyCoord(method_data['ra'], method_data['dec'], unit=(u.deg,u.deg), frame='icrs'))
+		pos_angle = host.position_angle(coord.SkyCoord(method_data['ra'], method_data['dec'], unit=(u.deg,u.deg), frame='icrs'))
 	return pos_angle
 
-def get_tail_lengths(w, ir, method, contour_list, peaks=None):
+def get_tail_lengths(w, host, method, contour_list, peaks=None):
 	'''
-	Determines angular separation between the IR position and the given comparison object
+	Determines angular separation between the host position and the given comparison object
 	Method:
-		Contour: from the IR position to the most distant part of the radio contour
-		Peak: from the IR position to the peak of the component
+		Contour: from the host position to the most distant part of the radio contour
+		Peak: from the host position to the peak of the component
 	'''
 	tail_lengths = []
 	if method == 'contour':
 		for contour in contour_list:
 			contour_sky = coord.SkyCoord(w.wcs_pix2world(contour.vertices,1), unit=(u.deg,u.deg), frame='icrs')
-			separation = ir.separation(contour_sky)
+			separation = host.separation(contour_sky)
 			tail_lengths.append(np.max(separation))
 	elif method == 'peak':
 		assert (peaks is not None), 'No radio peaks provided'
 		for contour, peak in zip(contour_list, peaks):
-			tail_lengths.append(get_colinear_separation(w, ir, peak, contour))
+			tail_lengths.append(get_colinear_separation(w, host, peak, contour))
 	return tail_lengths
 
-def get_colinear_separation(w, ir, peak, contour):
+def get_colinear_separation(w, host, peak, contour):
 	'''
 	Finds the distance from the host to the edge of the contour, passing through the peak
 	'''
 	
-	ir_pos = w.wcs_world2pix(np.array([[ir.ra.deg,ir.dec.deg]]), 1)[0]
+	host_pos = w.wcs_world2pix(np.array([[host.ra.deg,host.dec.deg]]), 1)[0]
 	peak_pos = w.wcs_world2pix(np.array([[peak['ra'], peak['dec']]]), 1)[0]
 	
-	# Extrapolate the line connecting the peak to the IR position
-	slope = (peak_pos[1]-ir_pos[1])/(peak_pos[0]-ir_pos[0])
-	extrap_pos = ir_pos + w._naxis1*np.array([1.,slope])
-	extrap_neg = ir_pos - w._naxis1*np.array([1.,slope])
+	# Extrapolate the line connecting the peak to the host position
+	slope = (peak_pos[1]-host_pos[1])/(peak_pos[0]-host_pos[0])
+	extrap_pos = host_pos + w._naxis1*np.array([1.,slope])
+	extrap_neg = host_pos - w._naxis1*np.array([1.,slope])
 	
 	# Split the contours into well-behaved functions
 	# Roll the array until the first index is the minimum value
@@ -300,10 +301,10 @@ def get_colinear_separation(w, ir, peak, contour):
 		c_interp = interp1d(x_seg, y_seg, 'linear')
 		c_interps.append(c_interp)
 	
-	if peak_pos[0] > ir_pos[0]:
-		tail = np.vstack((extrap_neg, ir_pos, peak_pos, extrap_pos))
+	if peak_pos[0] > host_pos[0]:
+		tail = np.vstack((extrap_neg, host_pos, peak_pos, extrap_pos))
 	else:
-		tail = np.vstack((extrap_pos, ir_pos, peak_pos, extrap_neg))
+		tail = np.vstack((extrap_pos, host_pos, peak_pos, extrap_neg))
 	
 	tail_interp = interp1d(tail.T[0], tail.T[1], 'linear')
 	
@@ -319,7 +320,7 @@ def get_colinear_separation(w, ir, peak, contour):
 	
 	# Return the maximum separation between host and edge
 	intersects_sky = coord.SkyCoord(w.wcs_pix2world(intersects,1), unit=(u.deg,u.deg), frame='icrs')
-	return max(ir.separation(intersects_sky))
+	return max(host.separation(intersects_sky))
 
 def curve_intersect(fun1, fun2, xmin, xmax):
 	'''
@@ -347,12 +348,12 @@ def curve_intersect(fun1, fun2, xmin, xmax):
 			intersections[ix] = brentq(diff, limits[ix], limits[ix+1])
 		return intersections
 
-def peak_edge_ratio(w, ir, peaks, tails):
+def peak_edge_ratio(w, host, peaks, tails):
 	'''
 	Calculate the ratio of the distance to the peak and to the edge of each tail (measured on the sky)
 	'''
 	ratios = []
 	for peak, tail in zip(peaks, tails):
 		peak_pos = coord.SkyCoord(peak['ra'], peak['dec'], unit=(u.deg,u.deg), frame=('icrs'))
-		ratios.append(ir.separation(peak_pos).deg/tail.deg)
+		ratios.append(host.separation(peak_pos).deg/tail.deg)
 	return ratios

@@ -1,12 +1,11 @@
 '''This file contains miscellaneous functions for the catalog pipeline, namely findBox, bboxToDS9, and approx.'''
 
-import logging, os
 import numpy as np
 
 def findBox(loop):
    '''
    creates a bounding box for a given contour path
-   loop = data['contours'][0][0]['arr'] #outermost contour (for testing)
+   loop = data['contours'][0][0]['arr'] # outermost contour (for testing)
    '''
    xmax = loop[0]['x']
    ymax = loop[0]['y']
@@ -25,8 +24,8 @@ def findBox(loop):
 
 def bboxToDS9(bbox, imgSize):
    '''
-   finds the coordinates of the bbox in DS9's system and the imput values for drawing a box in DS9
-   bbox = tree.value['bbox'] #outermost bbox (for testing)
+   finds the coordinates of the bbox in DS9's system and the input values for drawing a box in DS9
+   bbox = tree.value['bbox'] # outermost bbox (for testing)
    '''
    xmax = bbox[0]
    ymax = bbox[1]

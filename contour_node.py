@@ -1,7 +1,7 @@
 '''
-This file contains an implementation of a contour tree object. Each Node contains a contour and links to the immediately interior contours.
+This file contains an implementation of a contour tree object, designed for measuring the total and peak fluxes of arbitrary radio galaxies. Each Node contains a contour and links to the immediately interior contours.
 The total radio flux through a contour, as well as radio peaks, can be calculated from the FITS file plus the contour pixels.
-The beam size of the survey is hard-coded in lines 60-66 and is currently set to FIRST; this only matters for integrated flux measurements.
+The beam size of the survey is hard-coded in lines 29-36 and is currently set to FIRST; this only matters for integrated flux measurements. This could be updated to read beam size from FITS file too.
 '''
 
 import numpy as np
@@ -14,10 +14,10 @@ from matplotlib import path
 import misc_functions as fn # Contains miscellaneous helper functions
 
 class Node(object):
-    '''tree implementation for contours'''
+    '''Tree implementation for contours'''
     
     def __init__(self, value=None, contour=None, fits_loc=None, img=None, w=None, sigmaJyBeam=0):
-        '''tree initializer'''
+        '''Tree initializer'''
         self.value = value # Contour curve and level data
         self.children = [] # Next contour curves contained within this one
         if fits_loc is not None:
@@ -54,7 +54,7 @@ class Node(object):
             self.peaks = []
     
     def insert(self, newNode):
-        '''insert a contour node'''
+        '''Insert a contour node'''
         if self.value is None: # Initialize the root with the outermost contour
             self.value = newNode.value
         elif self.value == newNode.value: # No duplicate contours
@@ -72,7 +72,7 @@ class Node(object):
                         child.insert(newNode)
     
     def check(self):
-        '''manually check the topology of the tree by printing level numbers and bboxes to screen (for testing only)'''
+        '''Manually check the topology of the tree by printing level numbers and bounding boxes to screen (for testing only)'''
         if self.value is None:
             print 'Empty'
         else:
@@ -84,7 +84,7 @@ class Node(object):
                     child.check()
     
     def getFITS(self, fits_loc):
-        '''read FITS data from file'''
+        '''Read FITS data from file'''
         self.img = fits.getdata(fits_loc, 0) # Imports data as array
         self.img[np.isnan(self.img)] = 0 # Sets NANs to 0
         self.imgSize = int(self.img.shape[0])
@@ -92,7 +92,7 @@ class Node(object):
         return self.img
     
     def getTotalFlux(self):
-        '''find the total integrated flux of the component and its error'''
+        '''Find the total integrated flux of the component and its error'''
         fluxDensityJyBeam = 0
         pixelCount = 0
         for i in range(self.imgSize-1):
@@ -107,14 +107,14 @@ class Node(object):
         return [self.fluxmJy, self.fluxErrmJy]
     
     def getPeaks(self, pList=None):
-        '''finds the peak values (in mJy) and locations (in DS9 pixels) and return as dict'''
+        '''Finds the peak values (in mJy) and locations (in DS9 pixels) and return as dict'''
         if pList is None:
             pList = []
         if self.children == []:
             bbox = fn.bboxToDS9(fn.findBox(self.value['arr']), self.imgSize)[0] # Bounding box of innermost contour
             fluxDensityJyBeam = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() # Peak flux in bbox, with 1 pixel padding
             locP = np.where(self.img == fluxDensityJyBeam) # Location in pixels
-            locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) # Location in ra and dec
+            locRD = self.w.wcs_pix2world( np.array( [[locP[1][0]+1, locP[0][0]+1]] ), 1) # Location in RA and Dec
             peak = dict(ra=locRD[0][0], dec=locRD[0][1], flux=fluxDensityJyBeam*1000)
             pList.append(peak)
         else:
@@ -124,7 +124,7 @@ class Node(object):
         return self.peaks
     
     def contains(self, point):
-        '''returns 1 if point is within the contour, returns 0 otherwise or if there is no contour data'''
+        '''Returns 1 if point is within the contour, returns 0 otherwise or if there is no contour data'''
         if self.pathOutline is not None:
             return self.pathOutline.contains_point(point)
         else:
