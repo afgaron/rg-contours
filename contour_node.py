@@ -112,7 +112,7 @@ class Node(object):
             peak_list = []
         if self.children == []:
             bbox = fn.bbox_to_ds9(fn.find_box(self.value['arr']), self.img_size)[0] # Bounding box of innermost contour
-            flux_density_Jy_beam = self.img[ bbox[3]-1:bbox[1]+1, bbox[2]-1:bbox[0]+1 ].max() # Peak flux in bbox, with 1 pixel padding
+            flux_density_Jy_beam = self.img[ int(bbox[3]-1):int(bbox[1]+1), int(bbox[2]-1):int(bbox[0]+1) ].max() # Peak flux in bbox, with 1 pixel padding
             loc_pix = np.where(self.img == flux_density_Jy_beam) # Location in pixels
             loc_wcs = self.w.wcs_pix2world( np.array( [[loc_pix[1][0]+1, loc_pix[0][0]+1]] ), 1) # Location in RA and Dec
             peak = dict(ra=loc_wcs[0][0], dec=loc_wcs[0][1], flux=flux_density_Jy_beam*1000)
