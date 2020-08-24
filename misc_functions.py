@@ -2,7 +2,7 @@
 
 import numpy as np
 
-def findBox(loop):
+def find_box(loop):
    '''
    creates a bounding box for a given contour path
    loop = data['contours'][0][0]['arr'] # outermost contour (for testing)
@@ -22,7 +22,7 @@ def findBox(loop):
          ymin = i['y']
    return [xmax, ymax, xmin, ymin]
 
-def bboxToDS9(bbox, imgSize):
+def bbox_to_ds9(bbox, img_size):
    '''
    finds the coordinates of the bbox in DS9's system and the input values for drawing a box in DS9
    bbox = tree.value['bbox'] # outermost bbox (for testing)
@@ -31,12 +31,12 @@ def bboxToDS9(bbox, imgSize):
    ymax = bbox[1]
    xmin = bbox[2]
    ymin = bbox[3]
-   temp = imgSize+1-ymax
-   ymax = imgSize+1-ymin
+   temp = img_size+1-ymax
+   ymax = img_size+1-ymin
    ymin = temp
-   newBbox = [xmax, ymax, xmin, ymin]
-   ds9Box = [ (xmax+xmin)/2., (ymax+ymin)/2., xmax-xmin, ymax-ymin ]
-   return [newBbox, ds9Box]
+   new_bbox = [xmax, ymax, xmin, ymin]
+   ds9_box = [ (xmax+xmin)/2., (ymax+ymin)/2., xmax-xmin, ymax-ymin ]
+   return [new_bbox, ds9_box]
 
 def approx(a, b, uncertainty=1e-5):
    '''determines if two floats are approximately equal'''

@@ -1,7 +1,9 @@
-from astropy import coordinates as coord, units as u
+from astropy import wcs, coordinates as coord, units as u
+from astropy.io import fits
 import numpy as np
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
+import json
 
 # Custom modules
 import misc_functions as fn # Contains miscellaneous helper functions
@@ -18,49 +20,73 @@ def get_radio(source):
 		data = json.load(cf)
 	
 	# Create list of trees, each containing a contour and its contents
-	contourTrees = []
-	consensusBboxes = [contour[0]['bbox'] for contour in data['contours']]
+	contour_trees = []
+	consensus_bboxes = [contour[0]['bbox'] for contour in data['contours']]
 	for contour in data['contours']:
-		for bbox in consensusBboxes:
+		for bbox in consensus_bboxes:
 			if fn.approx(contour[0]['bbox'][0], bbox[0]) and fn.approx(contour[0]['bbox'][1], bbox[1]) and \
 			   fn.approx(contour[0]['bbox'][2], bbox[2]) and fn.approx(contour[0]['bbox'][3], bbox[3]):
 				tree = c.Node(contour=contour, fits_loc=source['fits_file'])
-				contourTrees.append(tree)
+				contour_trees.append(tree)
 	
 	# Get component fluxes and sizes
 	components = []
-	for tree in contourTrees:
-		bboxP = fn.bboxToDS9(fn.findBox(tree.value['arr']), tree.imgSize)[0] # Bounding box in DS9 coordinate pixels
-		bboxCornersRD = tree.w.wcs_pix2world( np.array( [[bboxP[0],bboxP[1]], [bboxP[2],bboxP[3]] ]), 1) # Two opposite corners of bbox in RA and Dec
-		raRange = [ min(bboxCornersRD[0][0], bboxCornersRD[1][0]), max(bboxCornersRD[0][0], bboxCornersRD[1][0]) ]
-		decRange = [ min(bboxCornersRD[0][1], bboxCornersRD[1][1]), max(bboxCornersRD[0][1], bboxCornersRD[1][1]) ]
-		pos1 = coord.SkyCoord(raRange[0], decRange[0], unit=(u.deg, u.deg))
-		pos2 = coord.SkyCoord(raRange[1], decRange[1], unit=(u.deg, u.deg))
-		extentArcsec = pos1.separation(pos2).arcsecond
-		solidAngleArcsec2 = tree.areaArcsec2
-		components.append({'flux':tree.fluxmJy, 'flux_err':tree.fluxErrmJy, 'angular_extent':extentArcsec, 'solid_angle':solidAngleArcsec2, \
-						   'ra_range':raRange, 'dec_range':decRange})
+	for tree in contour_trees:
+		bbox_pix = fn.bbox_to_ds9(fn.find_box(tree.value['arr']), tree.img_size)[0] # Bounding box in DS9 coordinate pixels
+		bbox_corners_wcs = tree.w.wcs_pix2world( np.array( [[bbox_pix[0],bbox_pix[1]], \
+															[bbox_pix[2],bbox_pix[3]] ]), 1) # Opposite corners of bbox in RA and Dec
+		ra_range = [ min(bbox_corners_wcs[0][0], bbox_corners_wcs[1][0]), max(bbox_corners_wcs[0][0], bbox_corners_wcs[1][0]) ]
+		dec_range = [ min(bbox_corners_wcs[0][1], bbox_corners_wcs[1][1]), max(bbox_corners_wcs[0][1], bbox_corners_wcs[1][1]) ]
+		pos1 = coord.SkyCoord(ra_range[0], dec_range[0], unit=(u.deg, u.deg))
+		pos2 = coord.SkyCoord(ra_range[1], dec_range[1], unit=(u.deg, u.deg))
+		extent_arcsec = pos1.separation(pos2).arcsecond
+		solid_angle_arcsec2 = tree.area_arcsec2
+		components.append({'flux':tree.flux_mJy, 'flux_err':tree.flux_err_mJy, 'angular_extent':extent_arcsec, 'solid_angle':solid_angle_arcsec2, \
+						   'ra_range':ra_range, 'dec_range':dec_range})
 	
 	# Adds up total flux of all components
-	totalFluxmJy = 0
-	totalFluxErrmJy2 = 0
+	total_flux_mJy = 0
+	total_flux_err_mJy2 = 0
 	for component in components:
-		totalFluxmJy += component['flux']
-		totalFluxErrmJy2 += np.square(component['flux_err'])
-	totalFluxErrmJy = np.sqrt(totalFluxErrmJy2)
+		total_flux_mJy += component['flux']
+		total_flux_err_mJy2 += np.square(component['flux_err'])
+	total_flux_err_mJy = np.sqrt(total_flux_err_mJy2)
 	
-	# Finds total area enclosed by contours in arcseconds
-	totalSolidAngleArcsec2 = 0
+	# Finds total area enclosed by contours and maximum extent of component bboxes
+	total_solid_angle_arcsec2, max_angular_extent_arcsec = get_total_size(components)
+	
+	# Combine all peaks into single list
+	peak_list = []
+	for tree in contour_trees:
+		for peak in tree.peaks:
+			peak_list.append(peak)
+	peak_flux_err_mJy = contour_trees[0].sigma_mJy
+	
+	# Find center of radio source
+	ra, dec = get_center(components)
+	
+	radio_data = {'total_flux':total_flux_mJy, 'total_flux_err':total_flux_err_mJy, 'outermost_level':data['contours'][0][0]['level']*1000, \
+				  'number_components':len(contour_trees), 'number_peaks':len(peak_list), 'max_angular_extent':max_angular_extent_arcsec, \
+				  'total_solid_angle':total_solid_angle_arcsec2, 'peak_flux_err':peak_flux_err_mJy, 'peaks':peak_list, 'components':components, \
+				  'ra':ra, 'dec':dec}
+	
+	return radio_data
+
+def get_total_size(components):
+	'''
+	Returns the area summed over all the components and the diagonal across the bounding box containing all components
+	'''
+	
+	total_solid_angle_arcsec2 = 0
 	for component in components:
-		totalSolidAngleArcsec2 += component['solid_angle']
+		total_solid_angle_arcsec2 += component['solid_angle']
 	
-	# Find maximum extent of component bboxes in arcseconds
-	maxAngularExtentArcsec = 0
+	max_angular_extent_arcsec = 0
 	if len(components)==1:
-		maxAngularExtentArcsec = components[0]['angular_extent']
+		max_angular_extent_arcsec = components[0]['angular_extent']
 	else:
 		for i in range(len(components)-1):
-			for j in range(1,len(components)-i):
+			for j in range(1, len(components)-i):
 				corners1 = np.array([ [components[i]['ra_range'][0], components[i]['dec_range'][0]], \
 									  [components[i]['ra_range'][0], components[i]['dec_range'][1]], \
 									  [components[i]['ra_range'][1], components[i]['dec_range'][0]], \
@@ -71,36 +97,28 @@ def get_radio(source):
 									  [components[i+j]['ra_range'][1], components[i+j]['dec_range'][1]] ])
 				pos1 = coord.SkyCoord(corners1.T[0], corners1.T[1], unit=(u.deg, u.deg))
 				pos2 = coord.SkyCoord(corners2.T[0], corners2.T[1], unit=(u.deg, u.deg))
-				angularExtentArcsec = pos1.separation(pos2).arcsecond
-				maxAngularExtentArcsec = max(np.append(angularExtentArcsec, maxAngularExtentArcsec))
+				angular_extent_arcsec = pos1.separation(pos2).arcsecond
+				max_angular_extent_arcsec = max(np.append(angular_extent_arcsec, max_angular_extent_arcsec))
 	
-	# Combine all peaks into single list
-	peakList = []
-	for tree in contourTrees:
-		for peak in tree.peaks:
-			peakList.append(peak)
-	peakFluxErrmJy = contourTrees[0].sigmamJy
+	return total_solid_angle_arcsec2, max_angular_extent_arcsec
+
+def get_center(components):
+	'''
+	Find the center of the source, defined as centroid of the bounding box; this is different than the centroid of the radio emission
+	'''
 	
-	# Find center of radio source
-	raMin, raMax, decMin, decMax = np.inf, 0, np.inf, 0
+	ra_min, ra_max, dec_min, dec_max = np.inf, 0, np.inf, 0
 	for comp in components:
-		if comp['ra_range'][0] < raMin:
-			raMin = comp['ra_range'][0]
-		if comp['ra_range'][1] > raMax:
-			raMax = comp['ra_range'][1]
-		if comp['dec_range'][0] < decMin:
-			decMin = comp['dec_range'][0]
-		if comp['dec_range'][1] > decMax:
-			decMax = comp['dec_range'][1]
-	meanRa = (raMax+raMin)/2.
-	meanDec = (decMax+decMin)/2.
+		if comp['ra_range'][0] < ra_min:
+			ra_min = comp['ra_range'][0]
+		if comp['ra_range'][1] > ra_max:
+			ra_max = comp['ra_range'][1]
+		if comp['dec_range'][0] < dec_min:
+			dec_min = comp['dec_range'][0]
+		if comp['dec_range'][1] > dec_max:
+			dec_max = comp['dec_range'][1]
 	
-	radio_data = {'total_flux':totalFluxmJy, 'total_flux_err':totalFluxErrmJy, 'outermost_level':data['contours'][0][0]['level']*1000, \
-				  'number_components':len(contourTrees), 'number_peaks':len(peakList), 'max_angular_extent':maxAngularExtentArcsec, \
-				  'total_solid_angle':totalSolidAngleArcsec2, 'peak_flux_err':peakFluxErrmJy, 'peaks':peakList, 'components':components, \
-				  'ra':meanRa, 'dec':meanDec}}
-	
-	return radio_data
+	return (ra_max+ra_min)/2., (dec_max+dec_min)/2.
 
 def get_bending(source):
 	'''
@@ -134,7 +152,7 @@ def get_bending(source):
 	# Using the 'contour' method
 	bending_angles = get_angles(w, host, 'contour', contour_list)
 	tail_lengths = get_tail_lengths(w, host, 'contour', contour_list)
-	ratios = peak_edge_ratio(w, host, peaks, tail_lengths_apparent)
+	ratios = peak_edge_ratio(w, host, peaks, tail_lengths)
 	asymmetry = ratios[1]/ratios[0]
 	using_contour = {'tail_deg_0':tail_lengths[0], 'tail_deg_1':tail_lengths[1], 'size_deg':sum(tail_lengths), 'ratio_0':ratios[0], 'ratio_1':ratios[1], 'asymmetry':max(asymmetry,1./asymmetry)}
 	using_contour.update(bending_angles)
@@ -164,6 +182,7 @@ def get_contours(w, host_pos, peak_pos, data, peak_count):
 	Removes outer layers until there are two components and a disjoint host location
 	Removes any contours that aren't in this source
 	'''
+	
 	assert (peak_count in [2,3]), 'Not a valid morphology'
 	
 	# Assemble the contour trees
@@ -201,6 +220,7 @@ def get_global_peaks(w, peak_pos, peaks, contour_tree):
 	'''
 	Determines the position of the global maximum for each component in the contour
 	'''
+	
 	global_peaks = []
 	for child in contour_tree.children:
 		global_peak = {'flux':0}
@@ -209,6 +229,7 @@ def get_global_peaks(w, peak_pos, peaks, contour_tree):
 				global_peak = peak
 		if global_peak['flux'] > 0:
 			global_peaks.append(global_peak)
+	
 	return global_peaks
 
 def get_angles(w, host, method, method_data):
@@ -218,6 +239,7 @@ def get_angles(w, host, method, method_data):
 		Contour: from the host position to the most distant part of the radio contour (data is contour_list)
 		Peak: from the host position to the peak of each component (data is source['radio']['peaks'])
 	'''
+	
 	assert (method in ['contour', 'peak']), 'Not a valid method'
 	pos_angle_0 = get_pos_angle(w, host, method, method_data[0])
 	pos_angle_1 = get_pos_angle(w, host, method, method_data[1])
@@ -227,6 +249,7 @@ def get_angles(w, host, method, method_data):
 	if np.abs(bisector-pos_angle_0) > np.pi/2*u.rad:
 		bisector += np.pi*u.rad
 	bending_angles = {'pos_angle_0':pos_angle_0, 'pos_angle_1':pos_angle_1, 'bending_angle':bending_angle, 'bisector':bisector.wrap_at(2*np.pi*u.rad)}
+	
 	return bending_angles
 
 def get_pos_angle(w, host, method, method_data):
@@ -236,12 +259,15 @@ def get_pos_angle(w, host, method, method_data):
 		Contour: from the host position to the most distant part of the radio contour (data is contour_list)
 		Peak: from the host position to the peak of each component (data is source['radio']['peaks'])
 	'''
+	
 	if method == 'contour':
 		contour_sky = coord.SkyCoord(w.wcs_pix2world(method_data.vertices,1), unit=(u.deg,u.deg), frame='icrs')
 		separation = host.separation(contour_sky)
 		pos_angle = host.position_angle(contour_sky)[separation==np.max(separation)][0]
+		
 	elif method == 'peak':
 		pos_angle = host.position_angle(coord.SkyCoord(method_data['ra'], method_data['dec'], unit=(u.deg,u.deg), frame='icrs'))
+	
 	return pos_angle
 
 def get_tail_lengths(w, host, method, contour_list, peaks=None):
@@ -251,16 +277,19 @@ def get_tail_lengths(w, host, method, contour_list, peaks=None):
 		Contour: from the host position to the most distant part of the radio contour
 		Peak: from the host position to the peak of the component
 	'''
+	
 	tail_lengths = []
 	if method == 'contour':
 		for contour in contour_list:
 			contour_sky = coord.SkyCoord(w.wcs_pix2world(contour.vertices,1), unit=(u.deg,u.deg), frame='icrs')
 			separation = host.separation(contour_sky)
 			tail_lengths.append(np.max(separation))
+			
 	elif method == 'peak':
 		assert (peaks is not None), 'No radio peaks provided'
 		for contour, peak in zip(contour_list, peaks):
 			tail_lengths.append(get_colinear_separation(w, host, peak, contour))
+	
 	return tail_lengths
 
 def get_colinear_separation(w, host, peak, contour):
@@ -327,6 +356,7 @@ def curve_intersect(fun1, fun2, xmin, xmax):
 	Finds the intersection of two curves, bounded in [xmin, xmax]
 	Returns an array of x values
 	'''
+	
 	diff = lambda x: fun1(x)-fun2(x)
 	x_range = np.linspace(xmin, xmax, 100)
 	m_sign = np.sign(diff(x_range)).astype(int)
@@ -352,6 +382,7 @@ def peak_edge_ratio(w, host, peaks, tails):
 	'''
 	Calculate the ratio of the distance to the peak and to the edge of each tail (measured on the sky)
 	'''
+	
 	ratios = []
 	for peak, tail in zip(peaks, tails):
 		peak_pos = coord.SkyCoord(peak['ra'], peak['dec'], unit=(u.deg,u.deg), frame=('icrs'))
