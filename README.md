@@ -30,8 +30,10 @@ The deviation of the two tails from co-linearity, measured in degrees (e.g., a p
 
 The position angle of the angle bisector of the bending angle, measured in degrees east of north. This quantity can be used to describe the orientation on the sky of the radio galaxy.
 
-```                               'pos_angle_0': 12.791288846231073,
-                               'pos_angle_1': 190.28153289408326,```
+```
+                               'pos_angle_0': 12.791288846231073,
+                               'pos_angle_1': 190.28153289408326,
+```
 
 Position angle of the two tails.
 
