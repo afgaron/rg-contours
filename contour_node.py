@@ -36,8 +36,7 @@ class Node(object):
         self.pixel_area_arcsec2 = wcs.utils.proj_plane_pixel_area(self.w)*3600*3600 # Arcsecond^2
         if contour is not None:
             mad2sigma = np.sqrt(2)*erfinv(2*0.75-1) # Conversion factor
-            self.sigma_Jy_beam = (contour[0]['level']/3) / mad2sigma # Standard deviation of flux density measurements
-            self.sigma_mJy = self.sigma_Jy_beam*1000*self.pixel_area_arcsec2/self.beam_area_arcsec2
+            self.sigma_mJy_beam = 1000*(contour[0]['level']/3) / mad2sigma # Standard deviation of flux density measurements
             for i in contour:
                 self.insert(Node(value=i, img=self.img, w=self.w, sigma_Jy_beam=self.sigma_Jy_beam))
             vertices = []

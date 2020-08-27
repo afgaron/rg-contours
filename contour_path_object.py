@@ -141,11 +141,11 @@ class Node(object):
 				root.get_kth_level(new_max_k, subroots)
 				roots[:] = roots + subroots
 	
-	def remove_triple_center(self, ir_pos, peak_pos):
+	def remove_triple_center(self, host_pos, peak_pos):
 		'''Finds the center component of a triple source (i.e. outermost contour that contains the IR host and a radio peak) and removes it from the tree'''
 		for ix, child in enumerate(self.children):
-			if child.contains(ir_pos):
+			if child.contains(host_pos):
 				if sum(child.contains(peak_pos))==1:
 					del self.children[ix]
 				elif np.any(child.contains(peak_pos)):
-					child.remove_triple_center(ir_pos, peak_pos)
+					child.remove_triple_center(host_pos, peak_pos)

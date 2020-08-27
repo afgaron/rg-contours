@@ -60,14 +60,14 @@ def get_radio(source):
 	for tree in contour_trees:
 		for peak in tree.peaks:
 			peak_list.append(peak)
-	peak_flux_err_mJy = contour_trees[0].sigma_mJy
+	peak_flux_err_mJy_beam = contour_trees[0].sigma_mJy_beam
 	
 	# Find center of radio source
 	ra, dec = get_center(components)
 	
 	radio_data = {'total_flux':total_flux_mJy, 'total_flux_err':total_flux_err_mJy, 'outermost_level':data['contours'][0][0]['level']*1000, \
 				  'number_components':len(contour_trees), 'number_peaks':len(peak_list), 'max_angular_extent':max_angular_extent_arcsec, \
-				  'total_solid_angle':total_solid_angle_arcsec2, 'peak_flux_err':peak_flux_err_mJy, 'peaks':peak_list, 'components':components, \
+				  'total_solid_angle':total_solid_angle_arcsec2, 'peak_flux_err':peak_flux_err_mJy_beam, 'peaks':peak_list, 'components':components, \
 				  'ra':ra, 'dec':dec}
 	
 	return radio_data
