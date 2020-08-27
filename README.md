@@ -81,13 +81,14 @@ The second method for determining the tail lengths and directions is the "peak" 
                              'size_deg': 0.015216069688823034,
                              'tail_deg_0': 0.006650632795955744,
                              'tail_deg_1': 0.00856543689286729}},
-
+```
+```
  'contour_file': '52af7d53eb9a9b05ef000809.json',
  'fits_file': 'FIRSTJ124646.7+224554.fits',
  'host_data': {'dec': 22.7615058, 'ra': 191.6946556},
 ```
 
-The contour file, FITS file, and host position are provided by the user.
+The contour file, FITS file, and host position provided by the user.
 
 ```
  'radio': {'components': [{'angular_extent': 32.36102391524036,
@@ -126,7 +127,8 @@ The projected area contained within the contours, measured in square arcsec.
                            'ra_range': [191.69142736631946,
                                         191.69537921470882],
                            'solid_angle': 228.76561864700378}],
-
+```
+```
            'dec': 22.760532042062998,
 ```
 
@@ -166,19 +168,23 @@ The uncertainty in peak flux measurements, measured in mJy/beam
            'peaks': [{'dec': 22.76623586618534,
                       'flux': 16.62060059607029,
                       'ra': 191.6958451445872},
-```
-
-For each radio peak, its location in RA and Dec and its value in mJy/beam.
-
-```
                      {'dec': 22.761648521120179,
                       'flux': 1.6361365560442209,
                       'ra': 191.69462003720014},
                      {'dec': 22.754769514196084,
                       'flux': 23.802017793059349,
                       'ra': 191.69340381298568}],
+```
 
+For each radio peak, its location in RA and Dec and its value in mJy/beam.
+
+```
            'ra': 191.69475549300944,
+```
+
+RA and Dec for the radio galaxy refer to the center of the bounding box containing all emission.
+
+```
            'total_flux': 70.909062022261367,
            'total_flux_err': 0.38914929035979101,
 ```
