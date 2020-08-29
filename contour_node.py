@@ -1,7 +1,7 @@
 '''
 This file contains an implementation of a contour tree object, designed for measuring the total and peak fluxes of arbitrary radio galaxies. Each Node contains a contour and links to the immediately interior contours.
 The total radio flux through a contour, as well as radio peaks, can be calculated from the FITS file plus the contour pixels.
-The beam size of the survey is hard-coded in lines 29-36 and is currently set to FIRST; this only matters for integrated flux measurements. This could be updated to read beam size from FITS file too.
+Disclaimer: it is assumed that the FITS image is square, and the loop in get_total_flux() will fail if it's not.
 '''
 
 import numpy as np
@@ -16,7 +16,7 @@ import misc_functions as fn # Contains miscellaneous helper functions
 class Node(object):
     '''Tree implementation for contours'''
     
-    def __init__(self, value=None, contour=None, fits_loc=None, img=None, w=None, sigma_Jy_beam=0):
+    def __init__(self, value=None, contour=None, fits_loc=None, img=None, header=None, w=None, sigma_mJy_beam=0):
         '''Tree initializer'''
         self.value = value # Contour curve and level data
         self.children = [] # Next contour curves contained within this one
@@ -25,20 +25,15 @@ class Node(object):
         else:
             self.img = img # FITS data as an array
             self.img_size = int(img.shape[0]) # Size in pixels of FITS data
+            self.header = header
             self.w = w # WCS converter object
-        dec = self.w.wcs_pix2world( np.array( [[self.img_size/2., self.img_size/2.]] ), 1)[0][1] # Dec of image center
-        if dec > 4.5558: # Northern region, above +4*33'21"
-            self.beam_area_arcsec2 = 1.44*np.pi*5.4*5.4/4 # 5.4" FWHM circle
-        elif 4.5558 > dec > -2.5069: # Middle region, between +4*33'21" and -2*30'25"
-            self.beam_area_arcsec2 = 1.44*np.pi*6.4*5.4/4 # 6.4"x5.4" FWHM ellipse
-        else: # Southern region, below -2*30'25"
-            self.beam_area_arcsec2 = 1.44*np.pi*6.8*5.4/4 # 6.8"x5.4" FWHM ellipse
+        self.beam_area_arcsec2 = 1.44/4*np.pi*self.header['BMAJ']*self.header['BMIN']*3600*3600 # FWHM ellipse
         self.pixel_area_arcsec2 = wcs.utils.proj_plane_pixel_area(self.w)*3600*3600 # Arcsecond^2
         if contour is not None:
             mad2sigma = np.sqrt(2)*erfinv(2*0.75-1) # Conversion factor
             self.sigma_mJy_beam = 1000*(contour[0]['level']/3) / mad2sigma # Standard deviation of flux density measurements
             for i in contour:
-                self.insert(Node(value=i, img=self.img, w=self.w, sigma_Jy_beam=self.sigma_Jy_beam))
+                self.insert(Node(value=i, img=self.img, header=self.header, w=self.w, sigma_mJy_beam=self.sigma_mJy_beam))
             vertices = []
             for pos in contour[0]['arr']:
                 vertices.append([pos['x'], pos['y']])
@@ -46,7 +41,7 @@ class Node(object):
             self.get_total_flux() # self.flux_mJy and self.flux_err_mJy are the total integrated flux and error, respectively; also sets self.area_arcsec2, in arcsec^2
             self.get_peaks() # self.peaks is list of dicts of peak fluxes and locations
         else:
-            self.sigma_Jy_beam = sigma_Jy_beam
+            self.sigma_mJy_beam = sigma_mJy_beam
             self.path_outline = None
             self.flux_mJy = 0
             self.flux_err_mJy = 0
@@ -87,7 +82,8 @@ class Node(object):
         self.img = fits.getdata(fits_loc, 0) # Imports data as array
         self.img[np.isnan(self.img)] = 0 # Sets NANs to 0
         self.img_size = int(self.img.shape[0])
-        self.w = wcs.WCS(fits.getheader(fits_loc, 0)) # Gets pixel-to-WCS conversion from header
+        self.header = fits.getheader(fits_loc, 0)
+        self.w = wcs.WCS(self.header) # Gets pixel-to-WCS conversion from header
         return self.img
     
     def get_total_flux(self):
@@ -100,9 +96,9 @@ class Node(object):
                     flux_density_Jy_beam += self.img[j][i]
                     n += 1
         self.area_arcsec2 = n*self.pixel_area_arcsec2
-        flux_density_err_Jy_beam = np.sqrt(n)*self.sigma_Jy_beam
+        flux_density_err_mJy_beam = np.sqrt(n)*self.sigma_mJy_beam
         self.flux_mJy = flux_density_Jy_beam*1000*self.pixel_area_arcsec2/self.beam_area_arcsec2
-        self.flux_err_mJy = flux_density_err_Jy_beam*1000*self.pixel_area_arcsec2/self.beam_area_arcsec2
+        self.flux_err_mJy = flux_density_err_mJy_beam*self.pixel_area_arcsec2/self.beam_area_arcsec2
         return [self.flux_mJy, self.flux_err_mJy]
     
     def get_peaks(self, peak_list=None):

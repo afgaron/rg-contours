@@ -2,5 +2,3 @@ numpy
 astropy
 scipy
 matplotlib
-json
-pprint
