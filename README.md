@@ -2,11 +2,11 @@
 
 This repository contains a collection of algorithms for analyzing radio image contour data, based on code originally written for the Radio Galaxy Zoo pipeline. Two implementations of storing contour data as tree data structures are included:
 
-- [`Contour_node`](contour_node.py) is a specialized tree that takes as input a contour file and a FITS image, and calculates physical properties for each island of emission (referred to as a "component") within the radio galaxy. These properties include integrated flux, integrated flux error, and the location of each emission peak (defined as the brightest pixel within each innermost contour). For integrated flux measurements, the beam size needs to be manually updated within the source code.
+- [`Contour_node`](contour_node.py) is a specialized tree that takes as input a contour file and a square FITS image, and calculates physical properties for each island of emission (referred to as a "component") within the radio galaxy. These properties include integrated flux, integrated flux error, and the location of each emission peak (defined as the brightest pixel within each innermost contour).
 
 - [`Contour_path_object`](contour_path_object.py) is a more general tree that only requires a contour file and a host galaxy position. It does not store derived quantities for the radio galaxy, but contains functions used in calculating the bending angle, orientation angle, and tail lengths of the galaxy.
 
-All of the functions used for processing the trees and deriving useful quantities are stored in [`processing`](processing.py), with a few miscellaneous helper functions used in both building the trees and processing the results stored in [`misc_functions`](misc_functions.py). Instructions on calling the two user-facing functions, `get_radio()` and `get_bending()`, are listed in [`example_usage`](example_usage.py).
+All of the functions used for processing the trees and deriving useful quantities are located in [`processing`](processing.py), with a few miscellaneous helper functions used in both building the trees and processing the results located in [`misc_functions`](misc_functions.py). Instructions on calling the two user-facing functions, `get_radio()` and `get_bending()`, are listed in [`example_usage`](example_usage.py).
 
 ## Inputs and outputs
 
@@ -16,7 +16,7 @@ An example FITS image of a radio galaxy and its corresponding contour file, stor
 {'bending': {'morphology': 'triple',
 ```
 
-The morphology of the source is based on the number of peaks in the radio emission: double sources have two peaks and triple sources have three. The bending algorithm can only take these two options as input right now.
+The morphology of the source is based on the number of peaks in the radio emission: double sources have two peaks and triple sources have three. The bending algorithm can only process these two morphologies.
 
 ```
              'using_contour': {'asymmetry': 1.091938058857924,
@@ -199,4 +199,4 @@ The total solid angle is the sum of the component solid angles.
 
 ## Additional help
 
-Background on the algorithms used here can be found in [Banfield et al. (2015)](https://academic.oup.com/mnras/article/453/3/2326/1075547) and [Garon et al. (2019)](https://iopscience.iop.org/article/10.3847/1538-3881/aaff62). For additional help, please contact Avery Garon at [garo0040@umn.edu](mailto:garo0040@umn).
+Background on the algorithms used here can be found in [Banfield et al. (2015)](https://academic.oup.com/mnras/article/453/3/2326/1075547) and [Garon et al. (2019)](https://iopscience.iop.org/article/10.3847/1538-3881/aaff62). For additional help, please contact Avery Garon at [garo0040@umn.edu](mailto:garo0040@umn.edu).
